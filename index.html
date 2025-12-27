@@ -1,7 +1,31 @@
+<!--
+MIT License
+
+Copyright (c) 2025 Mason Z.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fluid ASCII</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fluid Simulation ASCII</title>
     <style>
         body {
             background-color: #111;
@@ -13,8 +37,10 @@
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            overflow: auto;
+            overflow-x: hidden;
+            overflow-y: auto;
             touch-action: auto;
+            width: 100%;
         }
         #controls {
             margin-bottom: 10px;
@@ -27,7 +53,8 @@
         }
         #ascii-container {
             font-size: 10px;
-            line-height: 10px;        
+            line-height: 10px;
+            letter-spacing: 4px;
             white-space: pre;
             background: #000;
             padding: 20px;
@@ -37,7 +64,30 @@
             user-select: none;
             overflow: hidden;
             display: block;
+            max-width: 100vw;
+            box-sizing: border-box;
         }
+        
+        @media (max-width: 768px) {
+            #ascii-container {
+                font-size: 8px;
+                line-height: 8px;
+                letter-spacing: 3px;
+                padding: 10px;
+                margin: 0 10px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            #ascii-container {
+                font-size: 6px;
+                line-height: 6px;
+                letter-spacing: 2.5px;
+                padding: 5px;
+                margin: 0 5px;
+            }
+        }
+        
         .w { color: #333; } .f { color: #0af; } .d { color: #06c; } .o { color: #111; }
         .btn {
             background: #444; color: white; border: none; padding: 5px 10px;
@@ -49,50 +99,49 @@
 </head>
 <body>
     <div id="controls">
-        <button id="accelBtn" class="btn">Enable iPhone Tilt</button>
-        <button onclick="sim.reset()" class="btn">Reset Particles</button>
+        <button id="accelBtn" class="btn">Enable Accelerometer</button>
+        <button onclick="sim.reset()" class="btn">Reset</button>
+        <br> <br> 
+        <label>Fluid Simulation <br> RAM Usage: <span id="memEst">N/A</span></label>
+        <br> <br>
+        <label>Diameter (chars): <span id="resVal">32</span></label><br>
+        <input type="range" id="resSlider" min="4" max="64" step="1" value="32">
         <br>
-        <label>Circle Diameter (chars): <span id="resVal">40</span></label><br>
-        <input type="range" id="resSlider" min="20" max="80" step="1" value="40">
-        <br>
-        <label>Rotation: <span id="rotVal">0</span>°</label><br>
+        <label>Rotation (deg): <span id="rotVal">0</span>°</label><br>
         <input type="range" id="rotSlider" min="-180" max="180" value="0">
         <br>
         <label>Gravity (m/s²) <span id="gravityVal">9.8</span></label><br>
         <input type="range" id="gravitySlider" min="0" max="80" step="0.1" value="9.8">
-        <br>
-        <label>RAM <span id="memEst">N/A</span></label>
     </div>
     <div id="ascii-container"></div>
 
 <script>
-    let DIAMETER = 40;
-    let WIDTH = DIAMETER;
-    let HEIGHT = DIAMETER;
-    const ASPECT_CORRECTION = 1.67;   
+    let DIAMETER = 32;
+    const MAX_SIZE = 64;
+    let WIDTH = MAX_SIZE;
+    let HEIGHT = MAX_SIZE;
+    const ASPECT_CORRECTION = 1.0;   
     let GRAVITY_STRENGTH = 9.8;
     const DT = 0.025;
     let cellCache = [];
     let container = document.getElementById('ascii-container');
 
     function initGrid() {
-        container.innerHTML = '';
-        cellCache = [];
-        WIDTH = DIAMETER;
-        HEIGHT = DIAMETER;
-
-        for (let y = 0; y < HEIGHT; y++) {
-            const rowCache = [];
-            for (let x = 0; x < WIDTH; x++) {
-                const span = document.createElement('span');
-                span.textContent = ' ';
-                container.appendChild(span);
-                rowCache.push(span);
+        if (cellCache.length === 0) {
+            container.innerHTML = '';
+            for (let y = 0; y < HEIGHT; y++) {
+                const rowCache = [];
+                for (let x = 0; x < WIDTH; x++) {
+                    const span = document.createElement('span');
+                    span.textContent = ' ';
+                    container.appendChild(span);
+                    rowCache.push(span);
+                }
+                if (y < HEIGHT - 1) {
+                    container.appendChild(document.createElement('br'));
+                }
+                cellCache.push(rowCache);
             }
-            if (y < HEIGHT - 1) {
-                container.appendChild(document.createElement('br'));
-            }
-            cellCache.push(rowCache);
         }
     }
 
@@ -105,10 +154,10 @@
         }
         reset() {
             this.particles = [];
-            this.radius = (DIAMETER / 2) * 0.95;
-            const centerX = WIDTH / 2;
-            const centerY = HEIGHT / 2;
-            const num = Math.floor(WIDTH * HEIGHT * 0.25);
+            this.radius = DIAMETER / 2;
+            const centerX = (WIDTH - 1) / 2;
+            const centerY = (HEIGHT - 1) / 2;
+            const num = Math.floor(DIAMETER * DIAMETER * 0.25);
             for (let i = 0; i < num; i++) {
                 let angle = Math.random() * Math.PI * 2;
                 let r = Math.random() * this.radius * 0.7;
@@ -122,8 +171,8 @@
             let gx = -Math.sin(rad) * GRAVITY_STRENGTH;
             let gy = Math.cos(rad) * GRAVITY_STRENGTH;
 
-            const centerX = WIDTH / 2;
-            const centerY = HEIGHT / 2;
+            const centerX = (WIDTH - 1) / 2;
+            const centerY = (HEIGHT - 1) / 2;
 
             for (let p of this.particles) {
                 p.vx += gx * DT;
@@ -131,16 +180,15 @@
                 p.x += p.vx * DT;
                 p.y += p.vy * DT;
 
-                // Circular boundary with aspect correction
                 let dx = p.x - centerX;
-                let dy = (p.y - centerY) * ASPECT_CORRECTION;
+                let dy = p.y - centerY;
                 let dist = Math.sqrt(dx*dx + dy*dy);
                 if (dist > this.radius) {
                     let nx = dx / dist;
                     let ny = dy / dist;
                     let depth = dist - this.radius;
                     p.x -= nx * depth;
-                    p.y -= ny * depth / ASPECT_CORRECTION;
+                    p.y -= ny * depth;
 
                     let dot = p.vx * nx + p.vy * ny;
                     p.vx -= 1.4 * dot * nx;
@@ -151,21 +199,20 @@
                 }
             }
 
-            // Particle separation (also aspect-corrected)
             for (let i = 0; i < this.particles.length; i++) {
                 let p1 = this.particles[i];
                 for (let j = i + 1; j < this.particles.length; j++) {
                     let p2 = this.particles[j];
                     let dx = p1.x - p2.x;
-                    let dy = (p1.y - p2.y) * ASPECT_CORRECTION;
+                    let dy = p1.y - p2.y;
                     let d2 = dx*dx + dy*dy;
                     if (d2 < 1.44 && d2 > 0.01) {
                         let d = Math.sqrt(d2);
                         let s = (1.2 - d) / d / 2;
                         p1.x += dx * s;
-                        p1.y += dy * s / ASPECT_CORRECTION;
+                        p1.y += dy * s;
                         p2.x -= dx * s;
-                        p2.y -= dy * s / ASPECT_CORRECTION;
+                        p2.y -= dy * s;
                     }
                 }
             }
@@ -180,15 +227,15 @@
                 }
             }
 
-            const centerX = WIDTH / 2;
-            const centerY = HEIGHT / 2;
+            const centerX = (WIDTH - 1) / 2;
+            const centerY = (HEIGHT - 1) / 2;
             const r2 = this.radius * this.radius;
 
             for (let y = 0; y < HEIGHT; y++) {
                 for (let x = 0; x < WIDTH; x++) {
                     let dx = x - centerX;
-                    let dy = (y - centerY) * ASPECT_CORRECTION;
-                    let isInside = (dx*dx + dy*dy) <= r2;
+                    let dy = y - centerY;
+                    let isInside = (dx*dx + dy*dy) < r2;
                     let count = density[y * WIDTH + x];
                     let nC = ' ', nK = 'o';
 
@@ -218,7 +265,6 @@
     document.getElementById('resSlider').oninput = function() {
         DIAMETER = parseInt(this.value);
         document.getElementById('resVal').innerText = DIAMETER;
-        initGrid();
         sim.reset();
         updateMemoryEstimate();
     };
@@ -244,7 +290,7 @@
     }
 
     function updateMemoryEstimate() {
-        const numParticles = Math.floor(WIDTH * HEIGHT * 0.25);
+        const numParticles = Math.floor(DIAMETER * DIAMETER * 0.25);
         const bytesParticles = numParticles * 32;
         const bytesDensity = WIDTH * HEIGHT * 2;
         const bytesOverhead = numParticles * 24;
